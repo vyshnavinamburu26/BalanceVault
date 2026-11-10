@@ -1,0 +1,82 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  ACCOUNT_HOLDER
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  fullName     String
+  email        String     @unique
+  passwordHash String
+  role         UserRole   @default(ACCOUNT_HOLDER)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  auditLogs    AuditLog[]
+  accounts     Account[]
+transactions Transaction[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entity     String?
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Account {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @unique @db.Uuid
+  accountNumber String   @unique
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id])
+  transactions  Transaction[]
+
+  @@map("accounts")
+}
+model Transaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  accountId   String   @db.Uuid
+  type        String
+  amount      Decimal  @db.Decimal(15, 2)
+  description String?
+  status      String   @default("COMPLETED")
+  idempotencyKey String? @unique
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  account     Account  @relation(fields: [accountId], references: [id])
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([createdAt])
+  @@map("transactions")
+}
