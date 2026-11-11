@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 
@@ -24,6 +23,9 @@ function App() {
   const [account, setAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [adminInfo, setAdminInfo] = useState(null);
+const [auditLogs, setAuditLogs] = useState([]);
+const [auditPagination, setAuditPagination] = useState(null);
 
   const [transactionType, setTransactionType] = useState("deposit");
   const [amount, setAmount] = useState("");
@@ -42,61 +44,100 @@ function App() {
   }
 
   // LOAD ACCOUNT DASHBOARD AND TRANSACTION HISTORY
-  const loadDashboard = useCallback(async () => {
-    if (!token) return;
+  
+const loadDashboard = useCallback(async () => {
+  if (!token) return;
 
-    setDashboardLoading(true);
+  setDashboardLoading(true);
 
-    try {
-      const headers = {
-        Authorization: `Bearer ${token}`
-      };
+  try {
+    const headers = {
+      Authorization: `Bearer ${token}`
+    };
 
-      const [dashboardResponse, transactionsResponse] =
-        await Promise.all([
-          fetch(`${API}/users/dashboard`, { headers }),
-          fetch(`${API}/users/transactions`, { headers })
-        ]);
+    // Verify the logged-in user
+    const meResponse = await fetch(`${API}/auth/me`, { headers });
+    const meData = await meResponse.json();
+
+    if (meResponse.status === 401) {
+      logout();
+      showMessage("Your session expired. Please log in again.", "error");
+      return;
+    }
+
+    if (!meResponse.ok) {
+      throw new Error(meData.message || "Unable to verify account");
+    }
+
+    const currentUser = meData.user;
+    setUser(currentUser);
+
+    // ADMIN DASHBOARD
+    if (currentUser.role === "ADMIN") {
+      const [dashboardResponse, auditResponse] = await Promise.all([
+        fetch(`${API}/admin/dashboard`, { headers }),
+        fetch(`${API}/admin/audit-logs?page=1&limit=10`, { headers })
+      ]);
 
       const dashboardData = await dashboardResponse.json();
-      const transactionsData = await transactionsResponse.json();
-
-      if (
-        dashboardResponse.status === 401 ||
-        dashboardResponse.status === 403
-      ) {
-        logout();
-        showMessage("Your session expired. Please log in again.", "error");
-        return;
-      }
+      const auditData = await auditResponse.json();
 
       if (!dashboardResponse.ok) {
-        throw new Error(
-          dashboardData.message || "Unable to load account dashboard"
-        );
+        throw new Error(dashboardData.message || "Unable to load admin dashboard");
       }
 
-      if (!transactionsResponse.ok) {
-        throw new Error(
-          transactionsData.message || "Unable to load transactions"
-        );
+      if (!auditResponse.ok) {
+        throw new Error(auditData.message || "Unable to load audit logs");
       }
 
-      setUser(dashboardData.user);
-      setAccount(dashboardData.account);
-      setTransactions(transactionsData.transactions || []);
-    } catch (error) {
-      showMessage(error.message || "Unable to connect to the server.", "error");
-    } finally {
-      setDashboardLoading(false);
-    }
-  }, [token]);
+      setAdminInfo(dashboardData.admin);
+      setAuditLogs(auditData.logs || []);
+      setAuditPagination(auditData.pagination || null);
 
-  useEffect(() => {
-    if (token) {
-      loadDashboard();
+      setAccount(null);
+      setTransactions([]);
+      return;
     }
-  }, [token, loadDashboard]);
+
+    // CUSTOMER DASHBOARD
+    const [dashboardResponse, transactionsResponse] = await Promise.all([
+      fetch(`${API}/users/dashboard`, { headers }),
+      fetch(`${API}/users/transactions`, { headers })
+    ]);
+
+    const dashboardData = await dashboardResponse.json();
+    const transactionsData = await transactionsResponse.json();
+
+    if (dashboardResponse.status === 401 ||
+        transactionsResponse.status === 401) {
+      logout();
+      showMessage("Your session expired. Please log in again.", "error");
+      return;
+    }
+
+    if (!dashboardResponse.ok || !transactionsResponse.ok) {
+      throw new Error(
+        dashboardData.message ||
+        transactionsData.message ||
+        "Unable to load customer dashboard"
+      );
+    }
+
+    setUser(dashboardData.user);
+    setAccount(dashboardData.account);
+    setTransactions(transactionsData.transactions || []);
+
+    setAdminInfo(null);
+    setAuditLogs([]);
+    setAuditPagination(null);
+
+  } catch (error) {
+    showMessage(error.message || "Unable to connect to the server.", "error");
+  } finally {
+    setDashboardLoading(false);
+  }
+}, [token,loadDashboard]);
+
 
   // LOGIN AND REGISTRATION
   async function handleSubmit(e) {
@@ -299,7 +340,101 @@ function App() {
           </div>
         )}
 
-        {dashboardLoading && !account ? (
+        
+{user?.role === "ADMIN" ? (
+  <section className="dashboard-card">
+    <div className="section-heading">
+      <div>
+        <span className="eyebrow">ADMINISTRATION</span>
+        <h2>Admin Dashboard</h2>
+        <p>Manage and monitor BalanceVault activity.</p>
+      </div>
+
+      <button
+        className="refresh-button"
+        onClick={loadDashboard}
+        disabled={dashboardLoading}
+      >
+        {dashboardLoading ? "Loading..." : "Refresh"}
+      </button>
+    </div>
+
+    {adminInfo && (
+      <div className="account-grid">
+        <div className="account-info-card">
+          <span>ADMIN NAME</span>
+          <h2>{adminInfo.fullName}</h2>
+          <p>{adminInfo.email}</p>
+        </div>
+
+        <div className="account-info-card">
+          <span>ACCESS ROLE</span>
+          <h2>{adminInfo.role}</h2>
+          <p>Authorized administrator</p>
+        </div>
+
+        <div className="account-info-card">
+          <span>TOTAL AUDIT LOGS</span>
+          <h2>{auditPagination?.totalLogs ?? 0}</h2>
+          <p>Recorded system activities</p>
+        </div>
+      </div>
+    )}
+
+    <div className="section-heading">
+      <div>
+        <span className="eyebrow">SECURITY MONITORING</span>
+        <h2>Audit Logs</h2>
+      </div>
+    </div>
+
+    {auditLogs.length === 0 ? (
+      <p className="empty-state">No audit logs found.</p>
+    ) : (
+      <div className="table-wrapper">
+        <table className="transaction-table">
+          <thead>
+            <tr>
+              <th>Actor</th>
+              <th>Action</th>
+              <th>Entity</th>
+              <th>IP Address</th>
+              <th>Date</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {auditLogs.map((log) => (
+              <tr key={log.id}>
+                <td>
+                  {log.actor?.fullName || "System"}
+                  <br />
+                  {log.actor?.email || "—"}
+                </td>
+                <td>{log.action}</td>
+                <td>{log.entity || "—"}</td>
+                <td>{log.ipAddress || "—"}</td>
+                <td>{formatDate(log.createdAt)}</td>
+                <td>
+                  {log.details
+                    ? JSON.stringify(log.details)
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <p className="security-note">
+      Showing {auditLogs.length} recent audit records.
+      Total records: {auditPagination?.totalLogs ?? 0}
+    </p>
+  </section>
+) : dashboardLoading && !account ? (
+
           <section className="dashboard-card">
             <p>Loading your account information...</p>
           </section>
