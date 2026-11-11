@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 
-const API = "http://localhost:5000/api";
+const API = "https://balancevault-backend.onrender.com/api";
 
 function App() {
   const [mode, setMode] = useState("login");
