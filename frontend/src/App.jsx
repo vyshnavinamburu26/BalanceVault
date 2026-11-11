@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 
@@ -5,6 +6,7 @@ const API = "https://balancevault-backend.onrender.com/api";
 
 function App() {
   const [mode, setMode] = useState("login");
+
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -22,10 +24,12 @@ function App() {
   const [user, setUser] = useState(null);
   const [account, setAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
+
   const [dashboardLoading, setDashboardLoading] = useState(false);
+
   const [adminInfo, setAdminInfo] = useState(null);
-const [auditLogs, setAuditLogs] = useState([]);
-const [auditPagination, setAuditPagination] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditPagination, setAuditPagination] = useState(null);
 
   const [transactionType, setTransactionType] = useState("deposit");
   const [amount, setAmount] = useState("");
@@ -43,105 +47,147 @@ const [auditPagination, setAuditPagination] = useState(null);
     });
   }
 
-  // LOAD ACCOUNT DASHBOARD AND TRANSACTION HISTORY
-  
-const loadDashboard = useCallback(async () => {
-  if (!token) return;
+  // LOGOUT
+  function logout() {
+    localStorage.removeItem("balancevault_token");
 
-  setDashboardLoading(true);
-
-  try {
-    const headers = {
-      Authorization: `Bearer ${token}`
-    };
-
-    // Verify the logged-in user
-    const meResponse = await fetch(`${API}/auth/me`, { headers });
-    const meData = await meResponse.json();
-
-    if (meResponse.status === 401) {
-      logout();
-      showMessage("Your session expired. Please log in again.", "error");
-      return;
-    }
-
-    if (!meResponse.ok) {
-      throw new Error(meData.message || "Unable to verify account");
-    }
-
-    const currentUser = meData.user;
-    setUser(currentUser);
-
-    // ADMIN DASHBOARD
-    if (currentUser.role === "ADMIN") {
-      const [dashboardResponse, auditResponse] = await Promise.all([
-        fetch(`${API}/admin/dashboard`, { headers }),
-        fetch(`${API}/admin/audit-logs?page=1&limit=10`, { headers })
-      ]);
-
-      const dashboardData = await dashboardResponse.json();
-      const auditData = await auditResponse.json();
-
-      if (!dashboardResponse.ok) {
-        throw new Error(dashboardData.message || "Unable to load admin dashboard");
-      }
-
-      if (!auditResponse.ok) {
-        throw new Error(auditData.message || "Unable to load audit logs");
-      }
-
-      setAdminInfo(dashboardData.admin);
-      setAuditLogs(auditData.logs || []);
-      setAuditPagination(auditData.pagination || null);
-
-      setAccount(null);
-      setTransactions([]);
-      return;
-    }
-
-    // CUSTOMER DASHBOARD
-    const [dashboardResponse, transactionsResponse] = await Promise.all([
-      fetch(`${API}/users/dashboard`, { headers }),
-      fetch(`${API}/users/transactions`, { headers })
-    ]);
-
-    const dashboardData = await dashboardResponse.json();
-    const transactionsData = await transactionsResponse.json();
-
-    if (dashboardResponse.status === 401 ||
-        transactionsResponse.status === 401) {
-      logout();
-      showMessage("Your session expired. Please log in again.", "error");
-      return;
-    }
-
-    if (!dashboardResponse.ok || !transactionsResponse.ok) {
-      throw new Error(
-        dashboardData.message ||
-        transactionsData.message ||
-        "Unable to load customer dashboard"
-      );
-    }
-
-    setUser(dashboardData.user);
-    setAccount(dashboardData.account);
-    setTransactions(transactionsData.transactions || []);
+    setToken("");
+    setUser(null);
+    setAccount(null);
+    setTransactions([]);
 
     setAdminInfo(null);
     setAuditLogs([]);
     setAuditPagination(null);
 
-  } catch (error) {
-    showMessage(error.message || "Unable to connect to the server.", "error");
-  } finally {
-    setDashboardLoading(false);
+    setAmount("");
+    setDescription("");
+    setMessage("");
   }
-}, [token,loadDashboard]);
 
+  // LOAD ADMIN OR CUSTOMER DASHBOARD
+  const loadDashboard = useCallback(async () => {
+    if (!token) return;
+
+    setDashboardLoading(true);
+
+    try {
+      const headers = {
+        Authorization: `Bearer ${token}`
+      };
+
+      // VERIFY AUTHENTICATED USER
+      const meResponse = await fetch(`${API}/auth/me`, {
+        headers
+      });
+
+      const meData = await meResponse.json();
+
+      if (meResponse.status === 401) {
+        logout();
+        showMessage("Your session expired. Please log in again.", "error");
+        return;
+      }
+
+      if (!meResponse.ok) {
+        throw new Error(meData.message || "Unable to verify account");
+      }
+
+      const currentUser = meData.user;
+      setUser(currentUser);
+
+      // ADMIN DASHBOARD
+      if (currentUser.role === "ADMIN") {
+        const [dashboardResponse, auditResponse] = await Promise.all([
+          fetch(`${API}/admin/dashboard`, { headers }),
+          fetch(`${API}/admin/audit-logs?page=1&limit=10`, { headers })
+        ]);
+
+        const dashboardData = await dashboardResponse.json();
+        const auditData = await auditResponse.json();
+
+        if (dashboardResponse.status === 401 ||
+            auditResponse.status === 401) {
+          logout();
+          showMessage("Your session expired. Please log in again.", "error");
+          return;
+        }
+
+        if (!dashboardResponse.ok) {
+          throw new Error(
+            dashboardData.message || "Unable to load admin dashboard"
+          );
+        }
+
+        if (!auditResponse.ok) {
+          throw new Error(
+            auditData.message || "Unable to load audit logs"
+          );
+        }
+
+        setAdminInfo(dashboardData.admin);
+        setAuditLogs(auditData.logs || []);
+        setAuditPagination(auditData.pagination || null);
+
+        setAccount(null);
+        setTransactions([]);
+
+        return;
+      }
+
+      // CUSTOMER DASHBOARD
+      const [dashboardResponse, transactionsResponse] = await Promise.all([
+        fetch(`${API}/users/dashboard`, { headers }),
+        fetch(`${API}/users/transactions`, { headers })
+      ]);
+
+      const dashboardData = await dashboardResponse.json();
+      const transactionsData = await transactionsResponse.json();
+
+      if (dashboardResponse.status === 401 ||
+          transactionsResponse.status === 401) {
+        logout();
+        showMessage("Your session expired. Please log in again.", "error");
+        return;
+      }
+
+      if (!dashboardResponse.ok || !transactionsResponse.ok) {
+        throw new Error(
+          dashboardData.message ||
+          transactionsData.message ||
+          "Unable to load customer dashboard"
+        );
+      }
+
+      setUser(dashboardData.user);
+      setAccount(dashboardData.account);
+      setTransactions(transactionsData.transactions || []);
+
+      setAdminInfo(null);
+      setAuditLogs([]);
+      setAuditPagination(null);
+
+    } catch (error) {
+      showMessage(
+        error.message || "Unable to connect to the server.",
+        "error"
+      );
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, [token]);
+
+  // LOAD DASHBOARD WHEN TOKEN CHANGES
+  useEffect(() => {
+    if (token) {
+      loadDashboard();
+    }
+  }, [token, loadDashboard]);
 
   // LOGIN AND REGISTRATION
   async function handleSubmit(e) {
     e.preventDefault();
+
     setLoading(true);
     setMessage("");
 
@@ -177,7 +223,9 @@ const loadDashboard = useCallback(async () => {
 
       if (mode === "register") {
         showMessage("Registration successful! Please log in.");
+
         setMode("login");
+
         setForm({
           fullName: "",
           email: form.email,
@@ -189,10 +237,13 @@ const loadDashboard = useCallback(async () => {
         }
 
         localStorage.setItem("balancevault_token", data.token);
+
         setUser(data.user || null);
         setToken(data.token);
+
         showMessage("Login successful!");
       }
+
     } catch (error) {
       showMessage(error.message, "error");
     } finally {
@@ -212,7 +263,10 @@ const loadDashboard = useCallback(async () => {
     }
 
     if (!/^\d{1,13}(\.\d{1,2})?$/.test(amount.trim())) {
-      showMessage("Enter an amount with up to two decimal places.", "error");
+      showMessage(
+        "Enter an amount with up to two decimal places.",
+        "error"
+      );
       return;
     }
 
@@ -227,22 +281,25 @@ const loadDashboard = useCallback(async () => {
         window.crypto?.randomUUID?.() ||
         `bv-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-      const response = await fetch(`${API}/transactions${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "Idempotency-Key": idempotencyKey
-        },
-        body: JSON.stringify({
-          amount: amount.trim(),
-          description:
-            description.trim() ||
-            (transactionType === "deposit"
-              ? "BalanceVault deposit"
-              : "BalanceVault withdrawal")
-        })
-      });
+      const response = await fetch(
+        `${API}/transactions${endpoint}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "Idempotency-Key": idempotencyKey
+          },
+          body: JSON.stringify({
+            amount: amount.trim(),
+            description:
+              description.trim() ||
+              (transactionType === "deposit"
+                ? "BalanceVault deposit"
+                : "BalanceVault withdrawal")
+          })
+        }
+      );
 
       const data = await response.json();
 
@@ -260,6 +317,7 @@ const loadDashboard = useCallback(async () => {
       setDescription("");
 
       await loadDashboard();
+
     } catch (error) {
       showMessage(error.message, "error");
     } finally {
@@ -267,24 +325,7 @@ const loadDashboard = useCallback(async () => {
     }
   }
 
-  // LOGOUT
-  function logout() {
-    localStorage.removeItem("balancevault_token");
-    setToken("");
-    setUser(null);
-    setAccount(null);
-    setTransactions([]);
-    setAmount("");
-    setDescription("");
-    setMessage("");
-    setForm({
-      fullName: "",
-      email: "",
-      password: ""
-    });
-    setMode("login");
-  }
-
+  // FORMAT CURRENCY
   function formatMoney(value) {
     return Number(value || 0).toLocaleString("en-IN", {
       style: "currency",
@@ -293,6 +334,7 @@ const loadDashboard = useCallback(async () => {
     });
   }
 
+  // FORMAT DATE
   function formatDate(value) {
     if (!value) return "—";
 
@@ -306,6 +348,7 @@ const loadDashboard = useCallback(async () => {
   if (token) {
     return (
       <main className="app-shell">
+
         <nav className="navbar">
           <div className="brand">
             <span className="brand-icon">B</span>
@@ -314,6 +357,7 @@ const loadDashboard = useCallback(async () => {
 
           <div className="nav-user">
             <span>{user?.fullName || "Account Holder"}</span>
+
             <button className="logout-button" onClick={logout}>
               Log out
             </button>
@@ -323,12 +367,17 @@ const loadDashboard = useCallback(async () => {
         <section className="welcome-card">
           <div className="welcome-content">
             <span className="eyebrow">SECURE DIGITAL BANKING</span>
+
             <h1>Welcome, {user?.fullName || "User"}!</h1>
+
             <p>
-              Your money movement, protected by a reliable and
-              traceable ledger.
+              Your money movement, protected by a reliable
+              and traceable ledger.
             </p>
-            <span className="status-pill">● Authenticated session</span>
+
+            <span className="status-pill">
+              ● Authenticated session
+            </span>
           </div>
 
           <div className="vault-art">BV</div>
@@ -340,107 +389,122 @@ const loadDashboard = useCallback(async () => {
           </div>
         )}
 
-        
-{user?.role === "ADMIN" ? (
-  <section className="dashboard-card">
-    <div className="section-heading">
-      <div>
-        <span className="eyebrow">ADMINISTRATION</span>
-        <h2>Admin Dashboard</h2>
-        <p>Manage and monitor BalanceVault activity.</p>
-      </div>
+        {/* ADMIN DASHBOARD */}
+        {user?.role === "ADMIN" ? (
 
-      <button
-        className="refresh-button"
-        onClick={loadDashboard}
-        disabled={dashboardLoading}
-      >
-        {dashboardLoading ? "Loading..." : "Refresh"}
-      </button>
-    </div>
+          <section className="dashboard-card">
 
-    {adminInfo && (
-      <div className="account-grid">
-        <div className="account-info-card">
-          <span>ADMIN NAME</span>
-          <h2>{adminInfo.fullName}</h2>
-          <p>{adminInfo.email}</p>
-        </div>
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">ADMINISTRATION</span>
+                <h2>Admin Dashboard</h2>
+                <p>Manage and monitor BalanceVault activity.</p>
+              </div>
 
-        <div className="account-info-card">
-          <span>ACCESS ROLE</span>
-          <h2>{adminInfo.role}</h2>
-          <p>Authorized administrator</p>
-        </div>
+              <button
+                className="refresh-button"
+                onClick={loadDashboard}
+                disabled={dashboardLoading}
+              >
+                {dashboardLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
 
-        <div className="account-info-card">
-          <span>TOTAL AUDIT LOGS</span>
-          <h2>{auditPagination?.totalLogs ?? 0}</h2>
-          <p>Recorded system activities</p>
-        </div>
-      </div>
-    )}
+            {adminInfo && (
+              <div className="account-grid">
 
-    <div className="section-heading">
-      <div>
-        <span className="eyebrow">SECURITY MONITORING</span>
-        <h2>Audit Logs</h2>
-      </div>
-    </div>
+                <div className="account-info-card">
+                  <span>ADMIN NAME</span>
+                  <h2>{adminInfo.fullName}</h2>
+                  <p>{adminInfo.email}</p>
+                </div>
 
-    {auditLogs.length === 0 ? (
-      <p className="empty-state">No audit logs found.</p>
-    ) : (
-      <div className="table-wrapper">
-        <table className="transaction-table">
-          <thead>
-            <tr>
-              <th>Actor</th>
-              <th>Action</th>
-              <th>Entity</th>
-              <th>IP Address</th>
-              <th>Date</th>
-              <th>Details</th>
-            </tr>
-          </thead>
+                <div className="account-info-card">
+                  <span>ACCESS ROLE</span>
+                  <h2>{adminInfo.role}</h2>
+                  <p>Authorized administrator</p>
+                </div>
 
-          <tbody>
-            {auditLogs.map((log) => (
-              <tr key={log.id}>
-                <td>
-                  {log.actor?.fullName || "System"}
-                  <br />
-                  {log.actor?.email || "—"}
-                </td>
-                <td>{log.action}</td>
-                <td>{log.entity || "—"}</td>
-                <td>{log.ipAddress || "—"}</td>
-                <td>{formatDate(log.createdAt)}</td>
-                <td>
-                  {log.details
-                    ? JSON.stringify(log.details)
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
+                <div className="account-info-card">
+                  <span>TOTAL AUDIT LOGS</span>
+                  <h2>{auditPagination?.totalLogs ?? 0}</h2>
+                  <p>Recorded system activities</p>
+                </div>
 
-    <p className="security-note">
-      Showing {auditLogs.length} recent audit records.
-      Total records: {auditPagination?.totalLogs ?? 0}
-    </p>
-  </section>
-) : dashboardLoading && !account ? (
+              </div>
+            )}
+
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">SECURITY MONITORING</span>
+                <h2>Audit Logs</h2>
+              </div>
+            </div>
+
+            {auditLogs.length === 0 ? (
+              <p className="empty-state">No audit logs found.</p>
+            ) : (
+
+              <div className="table-wrapper">
+                <table className="transaction-table">
+
+                  <thead>
+                    <tr>
+                      <th>Actor</th>
+                      <th>Action</th>
+                      <th>Entity</th>
+                      <th>IP Address</th>
+                      <th>Date</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {auditLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td>
+                          {log.actor?.fullName || "System"}
+                          <br />
+                          {log.actor?.email || "—"}
+                        </td>
+
+                        <td>{log.action}</td>
+                        <td>{log.entity || "—"}</td>
+                        <td>{log.ipAddress || "—"}</td>
+                        <td>{formatDate(log.createdAt)}</td>
+
+                        <td>
+                          {log.details
+                            ? JSON.stringify(log.details)
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                </table>
+              </div>
+            )}
+
+            <p className="security-note">
+              Showing {auditLogs.length} recent audit records.
+              Total records: {auditPagination?.totalLogs ?? 0}
+            </p>
+
+          </section>
+
+        ) : dashboardLoading && !account ? (
 
           <section className="dashboard-card">
             <p>Loading your account information...</p>
           </section>
+
         ) : account ? (
+
           <>
+            {/* CUSTOMER ACCOUNT DETAILS */}
             <section className="account-grid">
+
               <div className="balance-card">
                 <span>AVAILABLE BALANCE</span>
                 <h2>{formatMoney(account.balance)}</h2>
@@ -458,9 +522,12 @@ const loadDashboard = useCallback(async () => {
                 <h2>{user?.fullName || "Account Holder"}</h2>
                 <p>{user?.email}</p>
               </div>
+
             </section>
 
+            {/* DEPOSIT AND WITHDRAW */}
             <section className="dashboard-card">
+
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">MONEY MOVEMENT</span>
@@ -469,6 +536,7 @@ const loadDashboard = useCallback(async () => {
               </div>
 
               <div className="transaction-tabs">
+
                 <button
                   type="button"
                   className={transactionType === "deposit" ? "active" : ""}
@@ -490,11 +558,14 @@ const loadDashboard = useCallback(async () => {
                 >
                   Withdraw
                 </button>
+
               </div>
 
               <form className="money-form" onSubmit={handleTransaction}>
+
                 <label>
                   Amount (₹)
+
                   <input
                     type="number"
                     min="0.01"
@@ -508,6 +579,7 @@ const loadDashboard = useCallback(async () => {
 
                 <label>
                   Description (optional)
+
                   <input
                     type="text"
                     maxLength="150"
@@ -520,7 +592,11 @@ const loadDashboard = useCallback(async () => {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={loading || !account || account.status !== "ACTIVE"}
+                  disabled={
+                    loading ||
+                    !account ||
+                    account.status !== "ACTIVE"
+                  }
                 >
                   {loading
                     ? "Processing..."
@@ -528,15 +604,19 @@ const loadDashboard = useCallback(async () => {
                       ? "Deposit money"
                       : "Withdraw money"}
                 </button>
+
               </form>
 
               <p className="security-note">
-                Transactions are recorded with unique request keys to
-                help prevent duplicate money movements.
+                Transactions are recorded with unique request keys
+                to help prevent duplicate money movements.
               </p>
+
             </section>
 
+            {/* TRANSACTION HISTORY */}
             <section className="dashboard-card history-card">
+
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">ACCOUNT ACTIVITY</span>
@@ -553,12 +633,17 @@ const loadDashboard = useCallback(async () => {
               </div>
 
               {transactions.length === 0 ? (
+
                 <p className="empty-state">
-                  No transactions found. Your transactions will appear here.
+                  No transactions found. Your transactions
+                  will appear here.
                 </p>
+
               ) : (
+
                 <div className="table-wrapper">
                   <table className="transaction-table">
+
                     <thead>
                       <tr>
                         <th>Type</th>
@@ -572,6 +657,7 @@ const loadDashboard = useCallback(async () => {
                     <tbody>
                       {transactions.map((transaction) => (
                         <tr key={transaction.id}>
+
                           <td>
                             <span
                               className={
@@ -591,29 +677,45 @@ const loadDashboard = useCallback(async () => {
                           <td>{transaction.description || "—"}</td>
                           <td>{transaction.status}</td>
                           <td>{formatDate(transaction.createdAt)}</td>
+
                         </tr>
                       ))}
                     </tbody>
+
                   </table>
                 </div>
+
               )}
+
             </section>
+
           </>
+
         ) : (
+
           <section className="dashboard-card">
             <h2>Account information unavailable</h2>
+
             <p>
-              {message || "We could not find an account linked to this user."}
+              {message ||
+                "We could not find an account linked to this user."}
             </p>
-            <button className="refresh-button" onClick={loadDashboard}>
+
+            <button
+              className="refresh-button"
+              onClick={loadDashboard}
+              disabled={dashboardLoading}
+            >
               Try again
             </button>
           </section>
+
         )}
 
         <footer className="dashboard-footer">
           BALANCEVAULT · SECURE FINANCIAL DEMO
         </footer>
+
       </main>
     );
   }
@@ -621,18 +723,29 @@ const loadDashboard = useCallback(async () => {
   // LOGIN AND REGISTRATION PAGE
   return (
     <main className="auth-page">
+
       <section className="auth-visual">
+
         <div className="brand">
           <span className="brand-icon">B</span>
           <span>BalanceVault</span>
         </div>
 
         <div className="visual-content">
-          <span className="eyebrow">SMARTER MONEY MANAGEMENT</span>
-          <h1>Your money.<br />Your control.</h1>
+
+          <span className="eyebrow">
+            SMARTER MONEY MANAGEMENT
+          </span>
+
+          <h1>
+            Your money.
+            <br />
+            Your control.
+          </h1>
+
           <p>
-            Experience secure, transparent and reliable digital
-            money management with BalanceVault.
+            Experience secure, transparent and reliable
+            digital money management with BalanceVault.
           </p>
 
           <div className="feature-list">
@@ -640,19 +753,27 @@ const loadDashboard = useCallback(async () => {
             <div>✓ Reliable money transactions</div>
             <div>✓ Transparent transaction records</div>
           </div>
+
         </div>
 
         <p className="visual-footer">
           BALANCEVAULT · SECURE FINANCIAL DEMO
         </p>
+
       </section>
 
       <section className="auth-panel">
+
         <div className="auth-box">
-          <span className="eyebrow">WELCOME TO BALANCEVAULT</span>
+
+          <span className="eyebrow">
+            WELCOME TO BALANCEVAULT
+          </span>
 
           <h2>
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            {mode === "login"
+              ? "Welcome back"
+              : "Create your account"}
           </h2>
 
           <p className="auth-description">
@@ -662,6 +783,7 @@ const loadDashboard = useCallback(async () => {
           </p>
 
           <div className="mode-switch">
+
             <button
               type="button"
               className={mode === "login" ? "active" : ""}
@@ -683,12 +805,15 @@ const loadDashboard = useCallback(async () => {
             >
               Register
             </button>
+
           </div>
 
           <form onSubmit={handleSubmit}>
+
             {mode === "register" && (
               <label>
                 Full name
+
                 <input
                   name="fullName"
                   type="text"
@@ -702,6 +827,7 @@ const loadDashboard = useCallback(async () => {
 
             <label>
               Email address
+
               <input
                 name="email"
                 type="email"
@@ -714,6 +840,7 @@ const loadDashboard = useCallback(async () => {
 
             <label>
               Password
+
               <input
                 name="password"
                 type="password"
@@ -726,7 +853,10 @@ const loadDashboard = useCallback(async () => {
             </label>
 
             {message && (
-              <div className={`message ${messageType}`} role="status">
+              <div
+                className={`message ${messageType}`}
+                role="status"
+              >
                 {message}
               </div>
             )}
@@ -742,13 +872,17 @@ const loadDashboard = useCallback(async () => {
                   ? "Sign in"
                   : "Create account"}
             </button>
+
           </form>
 
           <p className="security-note">
             🔒 Your account access is protected with JWT authentication.
           </p>
+
         </div>
+
       </section>
+
     </main>
   );
 }
