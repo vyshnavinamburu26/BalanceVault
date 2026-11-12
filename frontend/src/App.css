@@ -100,7 +100,7 @@ input {
   display: grid;
   place-items: center;
   padding: 35px;
-  background: #fff;
+  background: #66b78e;
 }
 
 .auth-box {
@@ -249,7 +249,7 @@ input {
 }
 
 .welcome-content p {
-  color: #d0e3e7;
+  color: #624fc4;
   line-height: 1.7;
 }
 
@@ -578,7 +578,10 @@ input {
     grid-column: 1 / -1;
   }
 }
-
+/* Welcome Back Heading - Dark Blue */
+.auth-panel .auth-box h2 {
+    color: #142D4E !important;
+}
 @media (max-width: 600px) {
   .account-grid,
   .money-form {
@@ -603,8 +606,6 @@ input {
   .section-heading h2 {
     font-size: 19px;
   }
-  /* BalanceVault Welcome Heading */
-.auth-panel .auth-box h2 {
-  color: #142D4E !important;
-}
+  /* Welcome Back Heading - Dark Blue */
+
 }
