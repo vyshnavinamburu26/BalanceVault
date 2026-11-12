@@ -106,6 +106,7 @@ input {
 .auth-box {
   width: 100%;
   max-width: 420px;
+  color: #142D4E !important;
 }
 
 .auth-box h2 {
@@ -602,4 +603,8 @@ input {
   .section-heading h2 {
     font-size: 19px;
   }
+  /* BalanceVault Welcome Heading */
+.auth-panel .auth-box h2 {
+  color: #142D4E !important;
+}
 }
